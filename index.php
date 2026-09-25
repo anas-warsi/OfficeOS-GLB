@@ -2,7 +2,61 @@
 declare(strict_types=1);
 
 session_start();
+
 require_once __DIR__ . '/config/database.php';
+
+function officeos_esc(string $value): string
+{
+    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+}
+
+function officeos_redirect_self(): void
+{
+    $target = strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/';
+    header('Location: ' . $target);
+    exit;
+}
+
+function officeos_flash(?string $message = null, string $type = 'success'): ?array
+{
+    if ($message !== null) {
+        $_SESSION['flash'] = ['message' => $message, 'type' => $type];
+        return null;
+    }
+
+    $flash = $_SESSION['flash'] ?? null;
+    unset($_SESSION['flash']);
+
+    return is_array($flash) ? $flash : null;
+}
+
+function officeos_current_user(): ?array
+{
+    return isset($_SESSION['user']) && is_array($_SESSION['user']) ? $_SESSION['user'] : null;
+}
+
+function officeos_sign_in(array $user): void
+{
+    session_regenerate_id(true);
+    $_SESSION['user'] = [
+        'id' => (int) ($user['id'] ?? 0),
+        'username' => (string) ($user['username'] ?? ''),
+        'email' => (string) ($user['email'] ?? ''),
+        'full_name' => (string) ($user['full_name'] ?? ''),
+        'role' => (string) ($user['role'] ?? 'employee'),
+        'department' => (string) ($user['department'] ?? ''),
+        'status' => (string) ($user['status'] ?? 'active'),
+    ];
+}
+
+function officeos_sign_out(): void
+{
+    $_SESSION = [];
+
+    if (session_id() !== '') {
+        session_destroy();
+    }
+}
 
 function officeos_demo_users(): array
 {
@@ -11,99 +65,39 @@ function officeos_demo_users(): array
             'id' => 1,
             'username' => 'admin',
             'email' => 'admin@officeos.local',
-            'password_hash' => '$2b$...',
+            'password_hash' => '$2y$12$qZbu8BjJlAQ7OlMki61aiOuuZtCV/kIict5eNofkn1ATr0J48IdHK',
             'full_name' => 'System Admin',
             'role' => 'admin',
+            'department' => 'Operations',
             'status' => 'active',
         ],
         [
             'id' => 2,
-            'username' => 'john_m',
-            'email' => 'john.m@company.com',
-            'password_hash' => '$2b$...',
-            'full_name' => 'John Miller',
+            'username' => 'manager',
+            'email' => 'manager@officeos.local',
+            'password_hash' => '$2y$12$4SJKl3RNaLJKJxbACN6QwusLSmv71fSusQTcytATYsghF4EbNjjau',
+            'full_name' => 'Team Manager',
             'role' => 'manager',
+            'department' => 'Operations',
             'status' => 'active',
         ],
         [
             'id' => 3,
-            'username' => 'sarah_e',
-            'email' => 'sarah.e@company.com',
-            'password_hash' => '$2b$...',
-            'full_name' => 'Sarah Smith',
+            'username' => 'employee',
+            'email' => 'employee@officeos.local',
+            'password_hash' => '$2y$12$Qm21piuetpqDJ2WHtjbVnOjDShQOmiux2h4HCMN76Rj/SyUGGRbnq',
+            'full_name' => 'Office Employee',
             'role' => 'employee',
+            'department' => 'Support',
             'status' => 'active',
         ],
     ];
 }
 
-function officeos_escape(string $value): string
+function officeos_demo_lookup_user(string $identifier): ?array
 {
-    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
-}
-
-function officeos_redirect_to_self(): void
-{
-    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
-    exit;
-}
-
-function officeos_logout(): void
-{
-    $_SESSION = [];
-
-    if (session_id() !== '') {
-        session_destroy();
-    }
-
-    officeos_redirect_to_self();
-}
-
-function officeos_current_user(): ?array
-{
-    return isset($_SESSION['user']) && is_array($_SESSION['user']) ? $_SESSION['user'] : null;
-}
-
-function officeos_normalize_user(array $user): array
-{
-    return [
-        'id' => (int) ($user['id'] ?? 0),
-        'username' => (string) ($user['username'] ?? ''),
-        'email' => (string) ($user['email'] ?? ''),
-        'full_name' => (string) ($user['full_name'] ?? ''),
-        'role' => (string) ($user['role'] ?? 'employee'),
-        'status' => (string) ($user['status'] ?? 'active'),
-    ];
-}
-
-function officeos_store_user_session(array $user): void
-{
-    session_regenerate_id(true);
-    $_SESSION['user'] = officeos_normalize_user($user);
-}
-
-function officeos_lookup_user(?mysqli $connection, string $identifier): ?array
-{
-    $identifier = trim($identifier);
-
-    if ($identifier !== '' && $connection instanceof mysqli) {
-        try {
-            $statement = $connection->prepare(
-                'SELECT id, username, email, password_hash, full_name, role, status FROM users WHERE username = ? OR email = ? LIMIT 1'
-            );
-            $statement->bind_param('ss', $identifier, $identifier);
-            $statement->execute();
-            $result = $statement->get_result();
-
-            if ($row = $result->fetch_assoc()) {
-                return $row;
-            }
-        } catch (Throwable $throwable) {
-        }
-    }
-
     foreach (officeos_demo_users() as $user) {
-        if (strcasecmp($user['username'], $identifier) === 0 || strcasecmp($user['email'], $identifier) === 0) {
+        if (strcasecmp($identifier, $user['username']) === 0 || strcasecmp($identifier, $user['email']) === 0) {
             return $user;
         }
     }
@@ -111,7 +105,7 @@ function officeos_lookup_user(?mysqli $connection, string $identifier): ?array
     return null;
 }
 
-function officeos_password_matches(string $password, array $user): bool
+function officeos_user_matches_password(string $password, array $user): bool
 {
     $hash = (string) ($user['password_hash'] ?? '');
 
@@ -121,915 +115,777 @@ function officeos_password_matches(string $password, array $user): bool
 
     $role = strtolower((string) ($user['role'] ?? 'employee'));
     $password = strtolower(trim($password));
-    $username = strtolower((string) ($user['username'] ?? ''));
 
-    $demoPasswords = [
-        'admin' => ['admin123', 'admin', 'officeos'],
-        'manager' => ['manager123', 'manager', 'officeos'],
-        'employee' => ['employee123', 'employee', 'officeos'],
-    ];
-
-    return in_array($password, $demoPasswords[$role] ?? [], true) || $password === $username;
+    return match ($role) {
+        'admin' => in_array($password, ['admin123', 'admin', 'officeos'], true),
+        'manager' => in_array($password, ['manager123', 'manager', 'officeos'], true),
+        default => in_array($password, ['employee123', 'employee', 'officeos'], true),
+    };
 }
 
-function officeos_query_count(?mysqli $connection, string $sql, int $fallback): int
+function officeos_lookup_user(?mysqli $connection, string $identifier): ?array
 {
-    if (!$connection instanceof mysqli) {
-        return $fallback;
+    $identifier = trim($identifier);
+
+    if ($identifier === '') {
+        return null;
     }
 
-    try {
-        $result = $connection->query($sql);
+    if ($connection instanceof mysqli) {
+        $statement = $connection->prepare('SELECT id, username, email, password_hash, full_name, role, department, status FROM users WHERE username = ? OR email = ? LIMIT 1');
 
-        if ($result instanceof mysqli_result) {
-            $row = $result->fetch_row();
-            return (int) ($row[0] ?? $fallback);
+        if ($statement instanceof mysqli_stmt) {
+            $statement->bind_param('ss', $identifier, $identifier);
+            $statement->execute();
+            $result = $statement->get_result();
+
+            if ($result instanceof mysqli_result && ($row = $result->fetch_assoc())) {
+                return $row;
+            }
         }
-    } catch (Throwable $throwable) {
     }
 
-    return $fallback;
+    return officeos_demo_lookup_user($identifier);
 }
 
-function officeos_query_rows(?mysqli $connection, string $sql, array $fallback): array
+function officeos_fetch_all(?mysqli $connection, string $sql, string $types = '', array $params = []): array
 {
-    if (!$connection instanceof mysqli) {
+    if (!($connection instanceof mysqli)) {
+        return [];
+    }
+
+    $statement = $connection->prepare($sql);
+    if (!($statement instanceof mysqli_stmt)) {
+        return [];
+    }
+
+    if ($types !== '' && $params !== []) {
+        officeos_bind_params($statement, $types, $params);
+    }
+
+    $statement->execute();
+    $result = $statement->get_result();
+
+    $rows = [];
+    if ($result instanceof mysqli_result) {
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
+    }
+
+    return $rows;
+}
+
+function officeos_fetch_value(?mysqli $connection, string $sql, string $types = '', array $params = [], int $fallback = 0): int
+{
+    $rows = officeos_fetch_all($connection, $sql, $types, $params);
+    if ($rows === []) {
         return $fallback;
     }
 
-    try {
-        $result = $connection->query($sql);
+    $row = $rows[0];
+    $value = array_values($row)[0] ?? $fallback;
 
-        if ($result instanceof mysqli_result) {
-            $rows = [];
-            while ($row = $result->fetch_assoc()) {
-                $rows[] = $row;
+    return (int) $value;
+}
+
+function officeos_execute(?mysqli $connection, string $sql, string $types = '', array $params = []): bool
+{
+    if (!($connection instanceof mysqli)) {
+        return false;
+    }
+
+    $statement = $connection->prepare($sql);
+    if (!($statement instanceof mysqli_stmt)) {
+        return false;
+    }
+
+    if ($types !== '' && $params !== []) {
+        officeos_bind_params($statement, $types, $params);
+    }
+
+    return (bool) $statement->execute();
+}
+
+function officeos_bind_params(mysqli_stmt $statement, string $types, array $params): bool
+{
+    $references = [$types];
+
+    foreach ($params as $index => $value) {
+        $references[$index + 1] = &$params[$index];
+    }
+
+    return $statement->bind_param(...$references);
+}
+
+function officeos_demo_employees(): array
+{
+    return array_values(array_filter(
+        officeos_demo_users(),
+        static fn (array $user): bool => ($user['role'] ?? '') === 'employee'
+    ));
+}
+
+function officeos_leaderboard(?mysqli $connection, int $currentUserId): array
+{
+    if ($connection instanceof mysqli) {
+        $rows = officeos_fetch_all(
+            $connection,
+            "SELECT u.id, u.full_name, u.department, COALESCE(t.completed_tasks, 0) AS completed_tasks, COALESCE(a.attendance_days, 0) AS attendance_days, (COALESCE(t.completed_tasks, 0) * 10 + COALESCE(a.attendance_days, 0) * 2) AS points FROM users u LEFT JOIN (SELECT employee_id, COUNT(*) AS completed_tasks FROM task_assignments WHERE status = 'completed' GROUP BY employee_id) t ON t.employee_id = u.id LEFT JOIN (SELECT user_id, COUNT(*) AS attendance_days FROM attendance GROUP BY user_id) a ON a.user_id = u.id WHERE u.role = 'employee' AND u.status = 'active' ORDER BY points DESC, u.full_name ASC LIMIT 5"
+        );
+
+        if ($rows !== []) {
+            foreach ($rows as &$row) {
+                $row['is_current'] = ((int) ($row['id'] ?? 0) === $currentUserId);
             }
 
             return $rows;
         }
-    } catch (Throwable $throwable) {
+    }
+
+    $fallback = [
+        ['id' => 3, 'full_name' => 'Office Employee', 'department' => 'Support', 'completed_tasks' => 2, 'attendance_days' => 12, 'points' => 44],
+        ['id' => 4, 'full_name' => 'Ava Patel', 'department' => 'Support', 'completed_tasks' => 1, 'attendance_days' => 11, 'points' => 32],
+        ['id' => 5, 'full_name' => 'Noah James', 'department' => 'Sales', 'completed_tasks' => 1, 'attendance_days' => 10, 'points' => 30],
+    ];
+
+    foreach ($fallback as &$row) {
+        $row['is_current'] = ((int) $row['id'] === $currentUserId);
     }
 
     return $fallback;
 }
 
-function officeos_dashboard_config(array $user, ?mysqli $connection): array
+function officeos_role_model(string $role, ?mysqli $connection, array $user): array
 {
-    $role = strtolower((string) ($user['role'] ?? 'employee'));
+    $userId = (int) ($user['id'] ?? 0);
+    $role = strtolower($role);
 
-    $config = [
+    $models = [
         'admin' => [
-            'title' => 'Admin Control Center',
-            'subtitle' => 'Monitor users, approvals, and platform health from one place.',
-            'badge' => 'Full system access',
+            'title' => 'Admin Dashboard',
+            'subtitle' => 'Manage users, review work, and keep the platform in order.',
+            'badge' => 'Admin access',
             'stats' => [
-                ['label' => 'Total Users', 'value' => officeos_query_count($connection, 'SELECT COUNT(*) FROM users', 18), 'hint' => 'All accounts'],
-                ['label' => 'Managers', 'value' => officeos_query_count($connection, "SELECT COUNT(*) FROM users WHERE role = 'manager'", 2), 'hint' => 'Supervisors'],
-                ['label' => 'Employees', 'value' => officeos_query_count($connection, "SELECT COUNT(*) FROM users WHERE role = 'employee'", 12), 'hint' => 'Active staff'],
-                ['label' => 'Open Leaves', 'value' => officeos_query_count($connection, "SELECT COUNT(*) FROM leave_requests WHERE status = 'pending'", 4), 'hint' => 'Awaiting review'],
+                ['label' => 'Users', 'value' => officeos_fetch_value($connection, 'SELECT COUNT(*) FROM users', '', [], 3), 'hint' => 'All accounts'],
+                ['label' => 'Managers', 'value' => officeos_fetch_value($connection, "SELECT COUNT(*) FROM users WHERE role = 'manager'", '', [], 1), 'hint' => 'Supervisors'],
+                ['label' => 'Employees', 'value' => officeos_fetch_value($connection, "SELECT COUNT(*) FROM users WHERE role = 'employee'", '', [], 1), 'hint' => 'Active staff'],
+                ['label' => 'Pending leave', 'value' => officeos_fetch_value($connection, "SELECT COUNT(*) FROM leave_requests WHERE status = 'pending'", '', [], 1), 'hint' => 'Awaiting review'],
             ],
-            'summary' => [
-                ['title' => 'Security', 'value' => 'Sessions active', 'detail' => 'Login state is handled entirely in PHP.'],
-                ['title' => 'Data', 'value' => 'MySQL ready', 'detail' => 'Prepared statements protect login queries.'],
-                ['title' => 'Coverage', 'value' => 'Role based', 'detail' => 'Admin, manager, and employee dashboards are split by session role.'],
-            ],
-            'tableTitle' => 'Recent users',
-            'tableHeaders' => ['Name', 'Role', 'Status'],
-            'tableRows' => officeos_query_rows(
-                $connection,
-                'SELECT full_name, role, status FROM users ORDER BY created_at DESC LIMIT 5',
-                [
-                    ['full_name' => 'System Admin', 'role' => 'admin', 'status' => 'active'],
-                    ['full_name' => 'John Miller', 'role' => 'manager', 'status' => 'active'],
-                    ['full_name' => 'Sarah Smith', 'role' => 'employee', 'status' => 'active'],
-                ]
-            ),
             'cards' => [
-                ['title' => 'User Management', 'text' => 'Create, review, and disable accounts.'],
-                ['title' => 'Leave Queue', 'text' => 'Approve or reject pending requests.'],
-                ['title' => 'Live Oversight', 'text' => 'Track the health of every role dashboard.'],
+                ['title' => 'Users', 'text' => 'Keep employee, manager, and admin accounts active and clean.'],
+                ['title' => 'Leave queue', 'text' => 'Review requests and move them forward without leaving the dashboard.'],
+                ['title' => 'Task overview', 'text' => 'Watch the board and keep assignments balanced.'],
             ],
+            'table_title' => 'Recent users',
+            'table_headers' => ['Name', 'Role', 'Status'],
+            'table_rows' => officeos_fetch_all($connection, 'SELECT full_name, role, status FROM users ORDER BY created_at DESC LIMIT 5'),
+            'forms' => ['task' => true, 'attendance' => false, 'leave' => true],
         ],
         'manager' => [
-            'title' => 'Manager Workspace',
-            'subtitle' => 'Assign work, balance load, and keep the team moving.',
-            'badge' => 'Team operations',
+            'title' => 'Manager Dashboard',
+            'subtitle' => 'Assign tasks, review attendance, and process leave requests.',
+            'badge' => 'Manager access',
             'stats' => [
-                ['label' => 'Assigned Tasks', 'value' => officeos_query_count($connection, 'SELECT COUNT(*) FROM tasks', 9), 'hint' => 'Current workload'],
-                ['label' => 'In Progress', 'value' => officeos_query_count($connection, "SELECT COUNT(*) FROM task_assignments WHERE status = 'in_progress'", 5), 'hint' => 'Moving now'],
-                ['label' => 'Pending Leaves', 'value' => officeos_query_count($connection, "SELECT COUNT(*) FROM leave_requests WHERE status = 'pending'", 3), 'hint' => 'Needs review'],
-                ['label' => 'Active Staff', 'value' => officeos_query_count($connection, "SELECT COUNT(*) FROM users WHERE role = 'employee'", 12), 'hint' => 'Team members'],
+                ['label' => 'Assigned tasks', 'value' => officeos_fetch_value($connection, 'SELECT COUNT(*) FROM task_assignments', '', [], 3), 'hint' => 'Open workload'],
+                ['label' => 'In progress', 'value' => officeos_fetch_value($connection, "SELECT COUNT(*) FROM task_assignments WHERE status = 'in_progress'", '', [], 1), 'hint' => 'Active tasks'],
+                ['label' => 'Today attendance', 'value' => officeos_fetch_value($connection, 'SELECT COUNT(*) FROM attendance WHERE work_date = CURDATE()', '', [], 1), 'hint' => 'Checked in'],
+                ['label' => 'Pending leave', 'value' => officeos_fetch_value($connection, "SELECT COUNT(*) FROM leave_requests WHERE status = 'pending'", '', [], 1), 'hint' => 'Needs review'],
             ],
-            'summary' => [
-                ['title' => 'Workload', 'value' => 'Balanced view', 'detail' => 'Spot overloaded employees before deadlines slip.'],
-                ['title' => 'Approvals', 'value' => 'Fast review', 'detail' => 'Leaves and status updates stay centralized.'],
-                ['title' => 'Planning', 'value' => 'Task flow', 'detail' => 'Tasks move from assigned to in progress to complete.'],
-            ],
-            'tableTitle' => 'Team tasks',
-            'tableHeaders' => ['Task', 'Owner', 'Status'],
-            'tableRows' => officeos_query_rows(
-                $connection,
-                'SELECT t.title AS task, u.full_name AS owner, ta.status FROM task_assignments ta INNER JOIN tasks t ON t.id = ta.task_id INNER JOIN users u ON u.id = ta.employee_id ORDER BY ta.created_at DESC LIMIT 5',
-                [
-                    ['task' => 'Website redesign', 'owner' => 'Sarah Smith', 'status' => 'in_progress'],
-                    ['task' => 'Attendance review', 'owner' => 'John Miller', 'status' => 'assigned'],
-                    ['task' => 'Leave approvals', 'owner' => 'Sarah Smith', 'status' => 'completed'],
-                ]
-            ),
             'cards' => [
-                ['title' => 'Task Assignment', 'text' => 'Create tasks and attach due dates.'],
-                ['title' => 'Workload Monitor', 'text' => 'See overloaded and underloaded staff instantly.'],
-                ['title' => 'Leave Review', 'text' => 'Approve pending requests without leaving the page.'],
+                ['title' => 'Task board', 'text' => 'Create work items and assign them to the right employee.'],
+                ['title' => 'Attendance', 'text' => 'Check who is present and who still needs a check-in.'],
+                ['title' => 'Leave review', 'text' => 'Approve or reject requests with a short note.'],
             ],
+            'table_title' => 'Team tasks',
+            'table_headers' => ['Task', 'Owner', 'Status'],
+            'table_rows' => officeos_fetch_all(
+                $connection,
+                'SELECT ta.id, t.title AS task, u.full_name AS owner, ta.status, ta.due_date FROM task_assignments ta INNER JOIN tasks t ON t.id = ta.task_id INNER JOIN users u ON u.id = ta.employee_id ORDER BY ta.created_at DESC LIMIT 5'
+            ),
+            'forms' => ['task' => true, 'attendance' => false, 'leave' => true],
         ],
         'employee' => [
             'title' => 'Employee Dashboard',
-            'subtitle' => 'Check tasks, attendance, and leave status in one view.',
-            'badge' => 'Personal workspace',
+            'subtitle' => 'Track tasks, attendance, and leave in one simple place.',
+            'badge' => 'Employee access',
             'stats' => [
-                ['label' => 'My Tasks', 'value' => officeos_query_count($connection, 'SELECT COUNT(*) FROM task_assignments', 4), 'hint' => 'Assigned work'],
-                ['label' => 'Completed', 'value' => officeos_query_count($connection, "SELECT COUNT(*) FROM task_assignments WHERE status = 'completed'", 2), 'hint' => 'Finished tasks'],
-                ['label' => 'Leave Balance', 'value' => '12 days', 'hint' => 'Configured in PHP'],
-                ['label' => 'Attendance', 'value' => 'Checked in', 'hint' => 'Today status'],
+                ['label' => 'My tasks', 'value' => officeos_fetch_value($connection, 'SELECT COUNT(*) FROM task_assignments WHERE employee_id = ?', 'i', [$userId], 1), 'hint' => 'Assigned work'],
+                ['label' => 'Completed', 'value' => officeos_fetch_value($connection, "SELECT COUNT(*) FROM task_assignments WHERE employee_id = ? AND status = 'completed'", 'i', [$userId], 1), 'hint' => 'Done tasks'],
+                ['label' => 'Leave status', 'value' => officeos_fetch_value($connection, "SELECT COUNT(*) FROM leave_requests WHERE user_id = ? AND status = 'pending'", 'i', [$userId], 0), 'hint' => 'Pending requests'],
+                ['label' => 'Attendance', 'value' => officeos_fetch_value($connection, 'SELECT COUNT(*) FROM attendance WHERE user_id = ?', 'i', [$userId], 1), 'hint' => 'Recorded days'],
             ],
-            'summary' => [
-                ['title' => 'Today', 'value' => 'Focus mode', 'detail' => 'Review your assigned work and update progress.'],
-                ['title' => 'Attendance', 'value' => 'One click', 'detail' => 'Mark attendance from your dashboard.'],
-                ['title' => 'Leave', 'value' => 'Request flow', 'detail' => 'Submit leave and track approval state.'],
-            ],
-            'tableTitle' => 'Assigned tasks',
-            'tableHeaders' => ['Task', 'Deadline', 'Status'],
-            'tableRows' => officeos_query_rows(
-                $connection,
-                'SELECT t.title AS task, COALESCE(ta.due_date, "--") AS deadline, ta.status FROM task_assignments ta INNER JOIN tasks t ON t.id = ta.task_id ORDER BY ta.created_at DESC LIMIT 5',
-                [
-                    ['task' => 'Update homepage sections', 'deadline' => '2026-09-26', 'status' => 'in_progress'],
-                    ['task' => 'Verify attendance', 'deadline' => '2026-09-27', 'status' => 'assigned'],
-                    ['task' => 'Prepare leave request', 'deadline' => '--', 'status' => 'completed'],
-                ]
-            ),
             'cards' => [
-                ['title' => 'My Work', 'text' => 'See tasks assigned by your manager.'],
-                ['title' => 'Time Tracking', 'text' => 'Attendance stays visible and simple.'],
-                ['title' => 'Requests', 'text' => 'Leave applications remain in your control.'],
+                ['title' => 'My work', 'text' => 'See the tasks assigned to you and update their status.'],
+                ['title' => 'Attendance', 'text' => 'Check in and check out from the dashboard.'],
+                ['title' => 'Leave', 'text' => 'Submit a request and track its progress.'],
             ],
+            'table_title' => 'Assigned tasks',
+            'table_headers' => ['Task', 'Due date', 'Status'],
+            'table_rows' => officeos_fetch_all(
+                $connection,
+                'SELECT ta.id, t.title AS task, COALESCE(ta.due_date, "--") AS due_date, ta.status FROM task_assignments ta INNER JOIN tasks t ON t.id = ta.task_id WHERE ta.employee_id = ? ORDER BY ta.created_at DESC LIMIT 5',
+                'i',
+                [$userId]
+            ),
+            'forms' => ['task' => false, 'attendance' => true, 'leave' => true],
         ],
     ];
 
-    return $config[$role] ?? $config['employee'];
+    $model = $models[$role] ?? $models['employee'];
+    $model['leaderboard'] = officeos_leaderboard($connection, $userId);
+    $model['role'] = $role;
+
+    return $model;
+}
+
+function officeos_status_chip(string $status): string
+{
+    $class = match (strtolower($status)) {
+        'completed', 'approved', 'present' => 'success',
+        'pending', 'assigned', 'in_progress' => 'warning',
+        'rejected', 'absent' => 'danger',
+        default => '',
+    };
+
+    return '<span class="chip ' . $class . '">' . officeos_esc(str_replace('_', ' ', $status)) . '</span>';
+}
+
+function officeos_render_table(array $headers, array $rows, string $role): void
+{
+    echo '<div class="table-wrap"><table><thead><tr>';
+    foreach ($headers as $header) {
+        echo '<th>' . officeos_esc((string) $header) . '</th>';
+    }
+    echo '</tr></thead><tbody>';
+
+    if ($rows === []) {
+        echo '<tr><td colspan="' . count($headers) . '" class="muted">No records yet.</td></tr>';
+        echo '</tbody></table></div>';
+        return;
+    }
+
+    foreach ($rows as $row) {
+        echo '<tr>';
+
+        if ($role === 'admin') {
+            echo '<td>' . officeos_esc((string) ($row['full_name'] ?? '')) . '</td>';
+            echo '<td>' . officeos_status_chip((string) ($row['role'] ?? '')) . '</td>';
+            echo '<td>' . officeos_status_chip((string) ($row['status'] ?? '')) . '</td>';
+        } elseif ($role === 'manager') {
+            echo '<td>' . officeos_esc((string) ($row['task'] ?? '')) . '</td>';
+            echo '<td>' . officeos_esc((string) ($row['owner'] ?? '')) . '</td>';
+            echo '<td>' . officeos_status_chip((string) ($row['status'] ?? '')) . '</td>';
+        } else {
+            echo '<td>' . officeos_esc((string) ($row['task'] ?? '')) . '</td>';
+            echo '<td>' . officeos_esc((string) ($row['due_date'] ?? '--')) . '</td>';
+            echo '<td>' . officeos_status_chip((string) ($row['status'] ?? '')) . '</td>';
+        }
+
+        echo '</tr>';
+    }
+
+    echo '</tbody></table></div>';
+}
+
+function officeos_render_dashboard(array $model, array $currentUser, ?mysqli $connection): void
+{
+    $role = (string) ($model['role'] ?? 'employee');
+    $employees = $connection instanceof mysqli ? officeos_fetch_all($connection, "SELECT id, full_name FROM users WHERE role = 'employee' AND status = 'active' ORDER BY full_name ASC") : officeos_demo_employees();
+    $leaveRows = $connection instanceof mysqli ? officeos_fetch_all($connection, 'SELECT lr.id, u.full_name, lr.leave_type, lr.start_date, lr.end_date, lr.status FROM leave_requests lr INNER JOIN users u ON u.id = lr.user_id ORDER BY lr.created_at DESC LIMIT 5') : [];
+    ?>
+    <div class="topbar">
+        <div class="container topbar-inner">
+            <div class="brand">
+                <div class="brand-mark">O</div>
+                <div>
+                    <p class="brand-title">Office OS</p>
+                    <p class="brand-subtitle">PHP and MySQL workspace</p>
+                </div>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <span class="badge"><?php echo officeos_esc((string) $model['badge']); ?></span>
+                <a class="btn ghost" href="?logout=1">Logout</a>
+            </div>
+        </div>
+    </div>
+    <main class="container layout">
+        <aside class="sidebar">
+            <h2><?php echo officeos_esc((string) ($currentUser['full_name'] ?? 'User')); ?></h2>
+            <p><?php echo officeos_esc(ucfirst($role)); ?> dashboard</p>
+            <ul class="menu">
+                <li><a href="#overview">Overview</a></li>
+                <li><a href="#tasks">Tasks</a></li>
+                <li><a href="#attendance">Attendance</a></li>
+                <li><a href="#leave">Leave</a></li>
+                <li><a href="#leaderboard">Leaderboard</a></li>
+            </ul>
+        </aside>
+        <section class="content">
+            <div class="hero" id="overview">
+                <span class="badge"><?php echo officeos_esc((string) $model['badge']); ?></span>
+                <h1><?php echo officeos_esc((string) $model['title']); ?></h1>
+                <p><?php echo officeos_esc((string) $model['subtitle']); ?></p>
+            </div>
+
+            <div class="stats-grid">
+                <?php foreach ($model['stats'] as $stat): ?>
+                    <div class="stat">
+                        <div class="label"><?php echo officeos_esc((string) $stat['label']); ?></div>
+                        <div class="value"><?php echo officeos_esc((string) $stat['value']); ?></div>
+                        <div class="hint"><?php echo officeos_esc((string) $stat['hint']); ?></div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <div class="cards-grid">
+                <?php foreach ($model['cards'] as $card): ?>
+                    <article class="section-card">
+                        <h3><?php echo officeos_esc((string) $card['title']); ?></h3>
+                        <p><?php echo officeos_esc((string) $card['text']); ?></p>
+                    </article>
+                <?php endforeach; ?>
+            </div>
+
+            <section class="panel" id="tasks">
+                <h2><?php echo officeos_esc((string) $model['table_title']); ?></h2>
+                <?php officeos_render_table($model['table_headers'], $model['table_rows'], $role); ?>
+            </section>
+
+            <div class="forms-grid">
+                <?php if (!empty($model['forms']['task'])): ?>
+                    <section class="section-card">
+                        <h3>Create task</h3>
+                        <form method="post">
+                            <input type="hidden" name="action" value="create_task" />
+                            <label>
+                                Task title
+                                <input type="text" name="task_title" required />
+                            </label>
+                            <label>
+                                Description
+                                <textarea name="task_description" placeholder="Short task note"></textarea>
+                            </label>
+                            <div class="field-grid">
+                                <label>
+                                    Priority
+                                    <select name="priority">
+                                        <option value="low">Low</option>
+                                        <option value="medium" selected>Medium</option>
+                                        <option value="high">High</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    Due date
+                                    <input type="date" name="due_date" />
+                                </label>
+                            </div>
+                            <label>
+                                Assign to employee
+                                <select name="employee_id" required>
+                                    <option value="">Choose employee</option>
+                                    <?php foreach ($employees as $employee): ?>
+                                        <option value="<?php echo (int) ($employee['id'] ?? 0); ?>"><?php echo officeos_esc((string) ($employee['full_name'] ?? '')); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </label>
+                            <button class="btn primary" type="submit">Save task</button>
+                        </form>
+                    </section>
+                <?php endif; ?>
+
+                <?php if (!empty($model['forms']['attendance'])): ?>
+                    <section class="section-card" id="attendance">
+                        <h3>Attendance</h3>
+                        <form method="post">
+                            <input type="hidden" name="action" value="attendance_check_in" />
+                            <button class="btn primary" type="submit">Check in</button>
+                        </form>
+                        <form method="post" style="margin-top:12px;">
+                            <input type="hidden" name="action" value="attendance_check_out" />
+                            <button class="btn" type="submit">Check out</button>
+                        </form>
+                    </section>
+                <?php endif; ?>
+
+                <?php if (!empty($model['forms']['leave'])): ?>
+                    <section class="section-card" id="leave">
+                        <h3>Leave request</h3>
+                        <form method="post">
+                            <input type="hidden" name="action" value="leave_request" />
+                            <div class="field-grid">
+                                <label>
+                                    Leave type
+                                    <select name="leave_type">
+                                        <option value="annual">Annual</option>
+                                        <option value="sick">Sick</option>
+                                        <option value="casual">Casual</option>
+                                    </select>
+                                </label>
+                                <label>
+                                    Start date
+                                    <input type="date" name="start_date" required />
+                                </label>
+                                <label>
+                                    End date
+                                    <input type="date" name="end_date" required />
+                                </label>
+                            </div>
+                            <label>
+                                Reason
+                                <textarea name="reason" required></textarea>
+                            </label>
+                            <button class="btn primary" type="submit">Submit leave</button>
+                        </form>
+                    </section>
+                <?php endif; ?>
+            </div>
+
+            <?php if ($role !== 'admin' && $role !== 'manager'): ?>
+                <section class="panel">
+                    <h2>Task status update</h2>
+                    <form method="post">
+                        <input type="hidden" name="action" value="update_task" />
+                        <div class="field-grid">
+                            <label>
+                                Assignment
+                                <select name="assignment_id" required>
+                                    <option value="">Choose assignment</option>
+                                    <?php foreach ($model['table_rows'] as $row): ?>
+                                        <?php if (!empty($row['id'])): ?>
+                                            <option value="<?php echo (int) $row['id']; ?>"><?php echo officeos_esc((string) ($row['task'] ?? 'Task')); ?></option>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                </select>
+                            </label>
+                            <label>
+                                Status
+                                <select name="task_status">
+                                    <option value="assigned">Assigned</option>
+                                    <option value="in_progress">In progress</option>
+                                    <option value="completed">Completed</option>
+                                </select>
+                            </label>
+                        </div>
+                        <button class="btn primary" type="submit">Update task</button>
+                    </form>
+                </section>
+            <?php elseif ($role === 'manager' || $role === 'admin'): ?>
+                <section class="panel">
+                    <h2>Leave review</h2>
+                    <?php if ($leaveRows === []): ?>
+                        <p class="muted">No leave requests to review.</p>
+                    <?php else: ?>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Employee</th>
+                                        <th>Type</th>
+                                        <th>Dates</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($leaveRows as $leaveRow): ?>
+                                        <tr>
+                                            <td><?php echo officeos_esc((string) ($leaveRow['full_name'] ?? '')); ?></td>
+                                            <td><?php echo officeos_esc((string) ($leaveRow['leave_type'] ?? '')); ?></td>
+                                            <td><?php echo officeos_esc((string) ($leaveRow['start_date'] ?? '')); ?> to <?php echo officeos_esc((string) ($leaveRow['end_date'] ?? '')); ?></td>
+                                            <td><?php echo officeos_status_chip((string) ($leaveRow['status'] ?? 'pending')); ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <form method="post" style="margin-top:14px;">
+                            <input type="hidden" name="action" value="review_leave" />
+                            <div class="field-grid">
+                                <label>
+                                    Leave request
+                                    <select name="leave_id" required>
+                                        <option value="">Choose request</option>
+                                        <?php foreach ($leaveRows as $leaveRow): ?>
+                                            <option value="<?php echo (int) ($leaveRow['id'] ?? 0); ?>"><?php echo officeos_esc((string) ($leaveRow['full_name'] ?? '')); ?> - <?php echo officeos_esc((string) ($leaveRow['leave_type'] ?? '')); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </label>
+                                <label>
+                                    Action
+                                    <select name="leave_status">
+                                        <option value="approved">Approve</option>
+                                        <option value="rejected">Reject</option>
+                                    </select>
+                                </label>
+                            </div>
+                            <button class="btn primary" type="submit">Save review</button>
+                        </form>
+                    <?php endif; ?>
+                </section>
+            <?php endif; ?>
+
+            <section class="panel" id="leaderboard">
+                <h2>Employee leaderboard</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Department</th>
+                                <th>Completed tasks</th>
+                                <th>Attendance days</th>
+                                <th>Points</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($model['leaderboard'] as $leader): ?>
+                                <tr>
+                                    <td><?php echo officeos_esc((string) ($leader['full_name'] ?? '')); ?><?php echo !empty($leader['is_current']) ? ' (you)' : ''; ?></td>
+                                    <td><?php echo officeos_esc((string) ($leader['department'] ?? '')); ?></td>
+                                    <td><?php echo officeos_esc((string) ($leader['completed_tasks'] ?? 0)); ?></td>
+                                    <td><?php echo officeos_esc((string) ($leader['attendance_days'] ?? 0)); ?></td>
+                                    <td><?php echo officeos_esc((string) ($leader['points'] ?? 0)); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </section>
+    </main>
+    <?php
 }
 
 $connection = officeos_db_connection();
-$authError = '';
+$flash = officeos_flash();
 
 if (isset($_GET['logout'])) {
-    officeos_logout();
+    officeos_sign_out();
+    officeos_redirect_self();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'login') {
-    $identifier = trim((string) ($_POST['identifier'] ?? ''));
-    $password = (string) ($_POST['password'] ?? '');
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = (string) ($_POST['action'] ?? '');
 
-    if ($identifier === '' || $password === '') {
-        $authError = 'Enter your username/email and password.';
-    } else {
-        $user = officeos_lookup_user($connection, $identifier);
+    if ($action === 'login') {
+        $identifier = trim((string) ($_POST['identifier'] ?? ''));
+        $password = (string) ($_POST['password'] ?? '');
 
-        if ($user && officeos_password_matches($password, $user)) {
-            officeos_store_user_session($user);
-            officeos_redirect_to_self();
+        if ($identifier === '' || $password === '') {
+            officeos_flash('Enter your username or email and password.', 'error');
+            officeos_redirect_self();
         }
 
-        $authError = 'Invalid credentials. Try the demo credentials shown below.';
+        $user = officeos_lookup_user($connection, $identifier);
+
+        if ($user && officeos_user_matches_password($password, $user)) {
+            officeos_sign_in($user);
+            officeos_flash('Welcome back, ' . (string) ($user['full_name'] ?? 'user') . '.');
+            officeos_redirect_self();
+        }
+
+        officeos_flash('Invalid credentials. Use the seeded demo users or your database account.', 'error');
+        officeos_redirect_self();
+    }
+
+    $currentUser = officeos_current_user();
+
+    if (!$currentUser) {
+        officeos_flash('Please sign in first.', 'error');
+        officeos_redirect_self();
+    }
+
+    $role = strtolower((string) ($currentUser['role'] ?? 'employee'));
+    $currentUserId = (int) ($currentUser['id'] ?? 0);
+
+    if ($action === 'attendance_check_in' && $role === 'employee') {
+        $today = date('Y-m-d');
+        $time = date('H:i:s');
+        $saved = officeos_execute(
+            $connection,
+            'INSERT INTO attendance (user_id, work_date, check_in, status) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE check_in = VALUES(check_in), status = VALUES(status)',
+            'isss',
+            [$currentUserId, $today, $time, 'present']
+        );
+
+        officeos_flash($saved ? 'Attendance check-in saved.' : 'Check-in could not be saved.');
+        officeos_redirect_self();
+    }
+
+    if ($action === 'attendance_check_out' && $role === 'employee') {
+        $today = date('Y-m-d');
+        $time = date('H:i:s');
+        $saved = officeos_execute(
+            $connection,
+            'UPDATE attendance SET check_out = ? WHERE user_id = ? AND work_date = ?',
+            'sis',
+            [$time, $currentUserId, $today]
+        );
+
+        officeos_flash($saved ? 'Attendance check-out saved.' : 'Check-out could not be saved.');
+        officeos_redirect_self();
+    }
+
+    if ($action === 'leave_request' && in_array($role, ['employee', 'manager', 'admin'], true)) {
+        $leaveType = trim((string) ($_POST['leave_type'] ?? 'annual'));
+        $startDate = trim((string) ($_POST['start_date'] ?? ''));
+        $endDate = trim((string) ($_POST['end_date'] ?? ''));
+        $reason = trim((string) ($_POST['reason'] ?? ''));
+
+        if ($leaveType === '' || $startDate === '' || $endDate === '' || $reason === '') {
+            officeos_flash('Complete the leave form before submitting.', 'error');
+            officeos_redirect_self();
+        }
+
+        $saved = officeos_execute(
+            $connection,
+            'INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, ?, ?)',
+            'isssss',
+            [$currentUserId, $leaveType, $startDate, $endDate, $reason, 'pending']
+        );
+
+        officeos_flash($saved ? 'Leave request submitted.' : 'Leave request could not be saved.');
+        officeos_redirect_self();
+    }
+
+    if ($action === 'create_task' && in_array($role, ['manager', 'admin'], true)) {
+        $title = trim((string) ($_POST['task_title'] ?? ''));
+        $description = trim((string) ($_POST['task_description'] ?? ''));
+        $priority = trim((string) ($_POST['priority'] ?? 'medium'));
+        $employeeId = (int) ($_POST['employee_id'] ?? 0);
+        $dueDate = trim((string) ($_POST['due_date'] ?? ''));
+
+        if ($title === '' || $employeeId <= 0) {
+            officeos_flash('Add a task title and assign it to an employee.', 'error');
+            officeos_redirect_self();
+        }
+
+        if ($dueDate === '') {
+            $dueDate = date('Y-m-d', strtotime('+1 day'));
+        }
+
+        $created = officeos_execute(
+            $connection,
+            'INSERT INTO tasks (title, description, priority, created_by) VALUES (?, ?, ?, ?)',
+            'sssi',
+            [$title, $description, $priority, $currentUserId]
+        );
+
+        if ($created && $connection instanceof mysqli) {
+            $taskId = (int) $connection->insert_id;
+            officeos_execute(
+                $connection,
+                'INSERT INTO task_assignments (task_id, employee_id, due_date, status) VALUES (?, ?, ?, ?)',
+                'iiss',
+                [$taskId, $employeeId, $dueDate, 'assigned']
+            );
+        }
+
+        officeos_flash($created ? 'Task created and assigned.' : 'Task could not be created.');
+        officeos_redirect_self();
+    }
+
+    if ($action === 'update_task' && in_array($role, ['employee', 'manager', 'admin'], true)) {
+        $assignmentId = (int) ($_POST['assignment_id'] ?? 0);
+        $status = trim((string) ($_POST['task_status'] ?? 'in_progress'));
+
+        if ($assignmentId <= 0) {
+            officeos_flash('Select a task first.', 'error');
+            officeos_redirect_self();
+        }
+
+        if ($role === 'employee') {
+            $updated = officeos_execute(
+                $connection,
+                'UPDATE task_assignments SET status = ? WHERE id = ? AND employee_id = ?',
+                'sii',
+                [$status, $assignmentId, $currentUserId]
+            );
+        } else {
+            $updated = officeos_execute(
+                $connection,
+                'UPDATE task_assignments SET status = ? WHERE id = ?',
+                'si',
+                [$status, $assignmentId]
+            );
+        }
+
+        officeos_flash($updated ? 'Task status updated.' : 'Task status could not be updated.');
+        officeos_redirect_self();
+    }
+
+    if ($action === 'review_leave' && in_array($role, ['manager', 'admin'], true)) {
+        $leaveId = (int) ($_POST['leave_id'] ?? 0);
+        $status = trim((string) ($_POST['leave_status'] ?? 'approved'));
+
+        if ($leaveId <= 0) {
+            officeos_flash('Select a leave request first.', 'error');
+            officeos_redirect_self();
+        }
+
+        $updated = officeos_execute(
+            $connection,
+            'UPDATE leave_requests SET status = ?, reviewed_by = ? WHERE id = ?',
+            'sii',
+            [$status, $currentUserId, $leaveId]
+        );
+
+        officeos_flash($updated ? 'Leave request updated.' : 'Leave request could not be updated.');
+        officeos_redirect_self();
     }
 }
 
 $currentUser = officeos_current_user();
-$dashboard = $currentUser ? officeos_dashboard_config($currentUser, $connection) : null;
-?>
-<!DOCTYPE html>
+$model = $currentUser ? officeos_role_model((string) ($currentUser['role'] ?? 'employee'), $connection, $currentUser) : null;
+
+?><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OfficeOS | Main Dashboard</title>
-    <style>
-        :root {
-            --bg: #07111d;
-            --bg-soft: #0f1a2a;
-            --panel: rgba(13, 22, 36, 0.92);
-            --panel-soft: rgba(18, 31, 49, 0.88);
-            --line: rgba(255, 255, 255, 0.12);
-            --text: #edf7ff;
-            --muted: #a9bfd3;
-            --primary: #62e6d7;
-            --accent: #7ab7ff;
-            --warning: #f9c74f;
-            --danger: #ff7d7d;
-            --success: #4ade80;
-            --shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        * {
-            box-sizing: border-box;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        body {
-            margin: 0;
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            color: var(--text);
-            background:
-                radial-gradient(circle at top left, rgba(98, 230, 215, 0.12), transparent 32%),
-                radial-gradient(circle at top right, rgba(122, 183, 255, 0.14), transparent 28%),
-                linear-gradient(135deg, var(--bg), #09182b 52%, #102138);
-            min-height: 100vh;
-        }
-
-        a {
-            color: inherit;
-            text-decoration: none;
-        }
-
-        .shell {
-            width: min(1280px, calc(100% - 28px));
-            margin: 0 auto;
-            padding: 18px 0 28px;
-        }
-
-        .top-banner {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 16px;
-            padding: 18px 20px;
-            margin-bottom: 18px;
-            border: 1px solid var(--line);
-            border-radius: 18px;
-            background: rgba(9, 17, 29, 0.55);
-            box-shadow: var(--shadow);
-            backdrop-filter: blur(14px);
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .brand-mark {
-            width: 42px;
-            height: 42px;
-            border-radius: 14px;
-            display: grid;
-            place-items: center;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            color: #08111d;
-            font-weight: 900;
-        }
-
-        .brand-title {
-            margin: 0;
-            font-size: 1.05rem;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-        }
-
-        .brand-subtitle {
-            margin: 3px 0 0;
-            color: var(--muted);
-            font-size: 0.92rem;
-        }
-
-        .pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 9px 14px;
-            border-radius: 999px;
-            border: 1px solid var(--line);
-            color: var(--text);
-            background: rgba(255, 255, 255, 0.05);
-            font-size: 0.88rem;
-        }
-
-        .login-wrap {
-            min-height: calc(100vh - 80px);
-            display: grid;
-            place-items: center;
-        }
-
-        .login-grid {
-            width: min(1100px, 100%);
-            display: grid;
-            grid-template-columns: 1.1fr 0.9fr;
-            gap: 18px;
-        }
-
-        .card {
-            border: 1px solid var(--line);
-            border-radius: 22px;
-            background: var(--panel);
-            box-shadow: var(--shadow);
-            backdrop-filter: blur(14px);
-        }
-
-        .login-copy {
-            padding: 34px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .login-copy::after {
-            content: '';
-            position: absolute;
-            right: -80px;
-            top: -80px;
-            width: 220px;
-            height: 220px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(98, 230, 215, 0.18), transparent 70%);
-        }
-
-        .eyebrow {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            border-radius: 999px;
-            background: rgba(98, 230, 215, 0.11);
-            color: var(--primary);
-            border: 1px solid rgba(98, 230, 215, 0.2);
-            font-size: 0.8rem;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-
-        h1, h2, h3, p {
-            margin-top: 0;
-        }
-
-        .hero-title {
-            font-size: clamp(2.4rem, 5vw, 4.4rem);
-            line-height: 1.05;
-            margin: 18px 0 16px;
-            max-width: 11ch;
-        }
-
-        .hero-text {
-            color: var(--muted);
-            max-width: 60ch;
-            font-size: 1.02rem;
-        }
-
-        .feature-list {
-            list-style: none;
-            padding: 0;
-            margin: 24px 0 0;
-            display: grid;
-            gap: 12px;
-        }
-
-        .feature-list li {
-            padding: 14px 16px;
-            border-radius: 14px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.04);
-            color: var(--muted);
-        }
-
-        .login-form {
-            padding: 30px;
-            background: linear-gradient(180deg, rgba(16, 28, 44, 0.98), rgba(10, 18, 30, 0.98));
-        }
-
-        .form-title {
-            font-size: 1.55rem;
-            margin-bottom: 6px;
-        }
-
-        .form-text {
-            color: var(--muted);
-            margin-bottom: 24px;
-        }
-
-        .alert {
-            margin-bottom: 16px;
-            padding: 12px 14px;
-            border-radius: 14px;
-            border: 1px solid rgba(255, 125, 125, 0.32);
-            background: rgba(255, 125, 125, 0.1);
-            color: #ffd0d0;
-        }
-
-        .field {
-            margin-bottom: 16px;
-        }
-
-        .field label {
-            display: block;
-            margin-bottom: 8px;
-            color: var(--muted);
-            font-size: 0.92rem;
-            font-weight: 600;
-        }
-
-        .field input {
-            width: 100%;
-            border-radius: 14px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.04);
-            color: var(--text);
-            padding: 14px 15px;
-            font-size: 1rem;
-            outline: none;
-        }
-
-        .field input:focus {
-            border-color: rgba(98, 230, 215, 0.62);
-            box-shadow: 0 0 0 3px rgba(98, 230, 215, 0.14);
-        }
-
-        .btn {
-            width: 100%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            border: none;
-            border-radius: 14px;
-            padding: 14px 18px;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            color: #07111d;
-            font-weight: 800;
-            font-size: 1rem;
-            cursor: pointer;
-        }
-
-        .form-note {
-            margin-top: 16px;
-            color: var(--muted);
-            font-size: 0.92rem;
-            line-height: 1.6;
-        }
-
-        .dashboard-shell {
-            display: grid;
-            grid-template-columns: 270px minmax(0, 1fr);
-            gap: 18px;
-        }
-
-        .sidebar {
-            position: sticky;
-            top: 18px;
-            align-self: start;
-            padding: 18px;
-        }
-
-        .sidebar-brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding-bottom: 18px;
-            border-bottom: 1px solid var(--line);
-            margin-bottom: 18px;
-        }
-
-        .nav {
-            display: grid;
-            gap: 10px;
-            margin: 0;
-            padding: 0;
-            list-style: none;
-        }
-
-        .nav a {
-            display: block;
-            padding: 12px 14px;
-            border-radius: 14px;
-            border: 1px solid transparent;
-            color: var(--muted);
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        .nav a:hover {
-            color: var(--text);
-            border-color: rgba(98, 230, 215, 0.28);
-        }
-
-        .sidebar-footer {
-            margin-top: 18px;
-            padding-top: 18px;
-            border-top: 1px solid var(--line);
-            color: var(--muted);
-            font-size: 0.92rem;
-        }
-
-        .main {
-            display: grid;
-            gap: 18px;
-        }
-
-        .main-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 18px 22px;
-        }
-
-        .header-meta {
-            display: grid;
-            gap: 4px;
-        }
-
-        .header-meta h1 {
-            margin: 0;
-            font-size: 1.65rem;
-        }
-
-        .header-meta p {
-            margin: 0;
-            color: var(--muted);
-        }
-
-        .header-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        .ghost-btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 10px 14px;
-            border-radius: 14px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.04);
-            color: var(--text);
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .stat-card {
-            padding: 18px;
-        }
-
-        .stat-card .label {
-            color: var(--muted);
-            font-size: 0.9rem;
-            margin-bottom: 8px;
-        }
-
-        .stat-card .value {
-            font-size: 2rem;
-            font-weight: 800;
-            margin-bottom: 6px;
-        }
-
-        .stat-card .hint {
-            color: var(--muted);
-            font-size: 0.9rem;
-        }
-
-        .grid-2 {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 18px;
-        }
-
-        .panel {
-            padding: 22px;
-        }
-
-        .panel h2 {
-            margin-bottom: 10px;
-            font-size: 1.15rem;
-        }
-
-        .panel p {
-            color: var(--muted);
-        }
-
-        .mini-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .mini-box {
-            padding: 16px;
-            border-radius: 16px;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.04);
-        }
-
-        .mini-box strong {
-            display: block;
-            margin-bottom: 8px;
-        }
-
-        .mini-box span {
-            color: var(--muted);
-            font-size: 0.92rem;
-        }
-
-        .table-wrap {
-            padding: 0;
-            overflow: hidden;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 14px 16px;
-            border-bottom: 1px solid var(--line);
-            text-align: left;
-        }
-
-        th {
-            color: var(--muted);
-            font-size: 0.88rem;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            background: rgba(255, 255, 255, 0.03);
-        }
-
-        tr:last-child td {
-            border-bottom: none;
-        }
-
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            border-radius: 999px;
-            background: rgba(98, 230, 215, 0.12);
-            border: 1px solid rgba(98, 230, 215, 0.24);
-            color: var(--primary);
-            font-size: 0.82rem;
-            font-weight: 700;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-        }
-
-        .role-summary {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
-            background: var(--success);
-            box-shadow: 0 0 10px currentColor;
-        }
-
-        .muted {
-            color: var(--muted);
-        }
-
-        @media (max-width: 1060px) {
-            .login-grid,
-            .dashboard-shell,
-            .stats,
-            .grid-2,
-            .role-summary,
-            .mini-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-
-        @media (max-width: 760px) {
-            .shell {
-                width: min(100% - 16px, 1280px);
-                padding-top: 12px;
-            }
-
-            .top-banner,
-            .main-header {
-                flex-direction: column;
-                align-items: flex-start;
-            }
-
-            .login-grid,
-            .dashboard-shell,
-            .stats,
-            .grid-2,
-            .role-summary,
-            .mini-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .sidebar {
-                position: static;
-            }
-
-            .login-copy,
-            .login-form,
-            .panel,
-            .stat-card {
-                padding: 20px;
-            }
-
-            .hero-title {
-                max-width: none;
-            }
-        }
-    </style>
+    <title>Office OS</title>
+    <link rel="stylesheet" href="assets/css/app.css" />
 </head>
-<body>
-    <div class="shell">
-        <div class="top-banner card">
-            <div class="brand">
+<body class="app-shell">
+<?php if (!$currentUser || !$model): ?>
+    <div class="login-wrap">
+        <section class="login-card">
+            <div class="brand" style="margin-bottom:14px;">
                 <div class="brand-mark">O</div>
                 <div>
-                    <p class="brand-title">OfficeOS</p>
-                    <p class="brand-subtitle">Single PHP dashboard with role-based access</p>
+                    <p class="brand-title">Office OS</p>
+                    <p class="brand-subtitle">Login for employee, manager, or admin</p>
                 </div>
             </div>
-            <div class="pill">
-                <span class="status-dot"></span>
-                <?php echo $currentUser ? 'Logged in as ' . officeos_escape($currentUser['role']) : 'Login required'; ?>
-            </div>
-        </div>
-
-        <?php if (!$currentUser): ?>
-            <div class="login-wrap">
-                <div class="login-grid">
-                    <section class="card login-copy">
-                        <span class="eyebrow">Workforce platform</span>
-                        <h1 class="hero-title">Everything your office needs in one dashboard.</h1>
-                        <p class="hero-text">OfficeOS keeps login, role control, attendance, leave, tasks, and workload tracking inside one PHP page. No external libraries. No separate frontend stack. Just a direct workflow from login to the correct dashboard.</p>
-                        <ul class="feature-list">
-                            <li>Login with username or email and get the correct role dashboard automatically.</li>
-                            <li>Admin, manager, and employee views are all rendered from the same backend entry point.</li>
-                            <li>Prepared statements and sessions handle the secure PHP side of the app.</li>
-                        </ul>
-                    </section>
-
-                    <section class="card login-form">
-                        <h2 class="form-title">Sign in</h2>
-                        <p class="form-text">Use your account details to open the matching dashboard.</p>
-
-                        <?php if ($authError !== ''): ?>
-                            <div class="alert"><?php echo officeos_escape($authError); ?></div>
-                        <?php endif; ?>
-
-                        <form method="post" action="">
-                            <input type="hidden" name="action" value="login" />
-                            <div class="field">
-                                <label for="identifier">Username or email</label>
-                                <input id="identifier" name="identifier" type="text" autocomplete="username" required />
-                            </div>
-                            <div class="field">
-                                <label for="password">Password</label>
-                                <input id="password" name="password" type="password" autocomplete="current-password" required />
-                            </div>
-                            <button type="submit" class="btn">Open dashboard</button>
-                        </form>
-
-                        <div class="form-note">
-                            Demo logins: <strong>admin / admin123</strong>, <strong>john_m / manager123</strong>, <strong>sarah_e / employee123</strong>.
-                            If your MySQL users table has real hashes, those will be used first.
-                        </div>
-                    </section>
+            <h1>Sign in</h1>
+            <p class="muted">Use the seeded accounts in the SQL file or connect the database and use your own users.</p>
+            <?php if ($flash): ?>
+                <div class="notice <?php echo officeos_esc((string) ($flash['type'] ?? 'success')); ?>"><?php echo officeos_esc((string) ($flash['message'] ?? '')); ?></div>
+            <?php endif; ?>
+            <form method="post" style="margin-top:16px;">
+                <input type="hidden" name="action" value="login" />
+                <div class="field-grid">
+                    <label>
+                        Username or email
+                        <input type="text" name="identifier" required />
+                    </label>
+                    <label>
+                        Password
+                        <input type="password" name="password" required />
+                    </label>
                 </div>
-            </div>
-        <?php else: ?>
-            <div class="dashboard-shell">
-                <aside class="card sidebar">
-                    <div class="sidebar-brand">
-                        <div class="brand-mark">O</div>
-                        <div>
-                            <p class="brand-title">OfficeOS</p>
-                            <p class="brand-subtitle"><?php echo officeos_escape(ucfirst($currentUser['role'])); ?> panel</p>
-                        </div>
-                    </div>
-
-                    <ul class="nav">
-                        <li><a href="#overview">Overview</a></li>
-                        <li><a href="#workload">Workload</a></li>
-                        <li><a href="#tasks">Tasks</a></li>
-                        <li><a href="#people">People</a></li>
-                    </ul>
-
-                    <div class="sidebar-footer">
-                        <strong><?php echo officeos_escape($currentUser['full_name'] ?: $currentUser['username']); ?></strong><br />
-                        <?php echo officeos_escape($currentUser['email']); ?><br /><br />
-                        <a class="ghost-btn" href="?logout=1">Logout</a>
-                    </div>
-                </aside>
-
-                <main class="main">
-                    <section class="card main-header" id="overview">
-                        <div class="header-meta">
-                            <span class="badge"><?php echo officeos_escape($dashboard['badge']); ?></span>
-                            <h1><?php echo officeos_escape($dashboard['title']); ?></h1>
-                            <p><?php echo officeos_escape($dashboard['subtitle']); ?></p>
-                        </div>
-                        <div class="header-actions">
-                            <span class="pill">Role: <?php echo officeos_escape($currentUser['role']); ?></span>
-                            <a class="ghost-btn" href="?logout=1">Logout</a>
-                        </div>
-                    </section>
-
-                    <section class="stats">
-                        <?php foreach ($dashboard['stats'] as $stat): ?>
-                            <div class="card stat-card">
-                                <div class="label"><?php echo officeos_escape((string) $stat['label']); ?></div>
-                                <div class="value"><?php echo officeos_escape((string) $stat['value']); ?></div>
-                                <div class="hint"><?php echo officeos_escape((string) $stat['hint']); ?></div>
-                            </div>
-                        <?php endforeach; ?>
-                    </section>
-
-                    <section class="grid-2">
-                        <div class="card panel">
-                            <h2>Platform summary</h2>
-                            <div class="role-summary">
-                                <?php foreach ($dashboard['summary'] as $item): ?>
-                                    <div class="mini-box">
-                                        <strong><?php echo officeos_escape((string) $item['title']); ?></strong>
-                                        <span><?php echo officeos_escape((string) $item['value']); ?></span><br />
-                                        <span><?php echo officeos_escape((string) $item['detail']); ?></span>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-
-                        <div class="card panel" id="workload">
-                            <h2>Role-specific control</h2>
-                            <div class="mini-grid">
-                                <?php foreach ($dashboard['cards'] as $card): ?>
-                                    <div class="mini-box">
-                                        <strong><?php echo officeos_escape((string) $card['title']); ?></strong>
-                                        <span><?php echo officeos_escape((string) $card['text']); ?></span>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="card panel table-wrap" id="tasks">
-                        <h2 style="padding: 22px 22px 0;"><?php echo officeos_escape($dashboard['tableTitle']); ?></h2>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <?php foreach ($dashboard['tableHeaders'] as $header): ?>
-                                        <th><?php echo officeos_escape((string) $header); ?></th>
-                                    <?php endforeach; ?>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($dashboard['tableRows'] as $row): ?>
-                                    <tr>
-                                        <?php foreach ($row as $cell): ?>
-                                            <td><?php echo officeos_escape((string) $cell); ?></td>
-                                        <?php endforeach; ?>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </section>
-
-                    <section class="grid-2" id="people">
-                        <div class="card panel">
-                            <h2>Current session</h2>
-                            <p><strong>Name:</strong> <?php echo officeos_escape($currentUser['full_name'] ?: $currentUser['username']); ?></p>
-                            <p><strong>Email:</strong> <?php echo officeos_escape($currentUser['email']); ?></p>
-                            <p><strong>Role:</strong> <?php echo officeos_escape($currentUser['role']); ?></p>
-                            <p class="muted">This page stays in PHP, and the visible dashboard changes as the session role changes.</p>
-                        </div>
-
-                        <div class="card panel">
-                            <h2>Workflow notes</h2>
-                            <p class="muted">Admin gets platform control, managers get task and approval tools, and employees see personal work, attendance, and leave status.</p>
-                            <p class="muted">If you want, the next step can connect real attendance forms, leave submission, and task update handlers to the same PHP entry point.</p>
-                        </div>
-                    </section>
-                </main>
-            </div>
-        <?php endif; ?>
+                <button class="btn primary" type="submit">Login</button>
+            </form>
+            <p class="footer-note" style="margin-top:16px;">Demo credentials: admin / admin123, manager / manager123, employee / employee123.</p>
+        </section>
     </div>
+<?php else: ?>
+    <?php if ($flash): ?>
+        <div class="container" style="padding-top:18px;">
+            <div class="notice <?php echo officeos_esc((string) ($flash['type'] ?? 'success')); ?>"><?php echo officeos_esc((string) ($flash['message'] ?? '')); ?></div>
+        </div>
+    <?php endif; ?>
+    <?php officeos_render_dashboard($model, $currentUser, $connection); ?>
+<?php endif; ?>
 </body>
 </html>
