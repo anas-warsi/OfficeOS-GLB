@@ -474,5 +474,3 @@ COMMIT;
 
 
 
-git config --global user.email "anaswarsi51@gmail.com"
-git config --global user.name "anas-warsi"
