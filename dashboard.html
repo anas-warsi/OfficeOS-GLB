@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Office OS | Dashboard</title>
+    <style>
+        :root {
+            --bg: #eef2f6;
+            --panel: #ffffff;
+            --panel-soft: #f7f9fc;
+            --line: #d7dde5;
+            --text: #1f2937;
+            --muted: #667085;
+            --accent: #2f5f8f;
+            --accent-soft: #dce8f4;
+            --shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(47, 95, 143, 0.12), transparent 28%),
+                radial-gradient(circle at bottom right, rgba(47, 95, 143, 0.08), transparent 24%),
+                var(--bg);
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .layout {
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 250px minmax(0, 1fr);
+        }
+
+        .sidebar {
+            padding: 24px;
+            background: rgba(255, 255, 255, 0.85);
+            border-right: 1px solid var(--line);
+            backdrop-filter: blur(6px);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .brand-mark {
+            width: 42px;
+            height: 42px;
+            display: grid;
+            place-items: center;
+            border-radius: 12px;
+            background: var(--accent);
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .brand h1,
+        .brand p {
+            margin: 0;
+        }
+
+        .brand h1 {
+            font-size: 1.05rem;
+        }
+
+        .brand p {
+            margin-top: 3px;
+            font-size: 0.9rem;
+            color: var(--muted);
+        }
+
+        .menu {
+            list-style: none;
+            padding: 0;
+            margin: 18px 0 0;
+            display: grid;
+            gap: 10px;
+        }
+
+        .menu a {
+            display: block;
+            padding: 11px 12px;
+            border: 1px solid transparent;
+            border-radius: 12px;
+            background: var(--panel-soft);
+        }
+
+        .menu a:hover {
+            background: #fff;
+            border-color: var(--line);
+        }
+
+        .sidebar-box {
+            margin-top: 22px;
+            padding: 14px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            background: #fff;
+        }
+
+        .sidebar-box small {
+            display: block;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 8px;
+        }
+
+        .sidebar-box strong {
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        .main {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            min-width: 0;
+        }
+
+        .navbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 18px 24px;
+            background: rgba(255, 255, 255, 0.92);
+            border-bottom: 1px solid var(--line);
+            backdrop-filter: blur(6px);
+        }
+
+        .navbar h2 {
+            margin: 0;
+            font-size: 1.15rem;
+        }
+
+        .navbar p {
+            margin: 4px 0 0;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        .navbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .pill,
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 0 14px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: #fff;
+            font-size: 0.92rem;
+        }
+
+        .pill {
+            background: var(--accent-soft);
+            color: var(--accent);
+            border-color: transparent;
+            font-weight: 700;
+        }
+
+        .button {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        .content {
+            padding: 24px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            padding: 20px;
+        }
+
+        .panel h3 {
+            margin: 0 0 8px;
+            font-size: 1.15rem;
+        }
+
+        .panel p {
+            margin: 0 0 18px;
+            color: var(--muted);
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 640px;
+        }
+
+        th,
+        td {
+            padding: 12px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--line);
+        }
+
+        th {
+            color: var(--muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: var(--panel-soft);
+            border: 1px solid var(--line);
+            font-size: 0.88rem;
+        }
+
+        .status.done {
+            color: #2f6f49;
+        }
+
+        .status.pending {
+            color: #9a6b1a;
+        }
+
+        .status.review {
+            color: #2f5f8f;
+        }
+
+        @media (max-width: 900px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                border-right: 0;
+                border-bottom: 1px solid var(--line);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .navbar,
+            .content,
+            .sidebar {
+                padding: 16px;
+            }
+
+            .navbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-mark">O</div>
+                <div>
+                    <h1>Office OS</h1>
+                    <p>Simple dashboard</p>
+                </div>
+            </div>
+
+            <ul class="menu">
+                <li><a href="#">Dashboard</a></li>
+                <li><a href="#">Users</a></li>
+                <li><a href="#">Tasks</a></li>
+                <li><a href="#">Attendance</a></li>
+                <li><a href="#">Reports</a></li>
+            </ul>
+
+            <div class="sidebar-box">
+                <small>Workspace</small>
+                <strong>Office team panel</strong>
+                <div class="muted">Basic layout with sidebar, navbar, and table.</div>
+            </div>
+        </aside>
+
+        <main class="main">
+            <header class="navbar">
+                <div>
+                    <h2>Dashboard</h2>
+                    <p>Overview of current items</p>
+                </div>
+                <div class="navbar-actions">
+                    <span class="pill">Admin</span>
+                    <a class="button" href="login.html">Logout</a>
+                </div>
+            </header>
+
+            <section class="content">
+                <div class="panel">
+                    <h3>Recent Records</h3>
+                    <p>Simple table for dashboard data.</p>
+
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Department</th>
+                                    <th>Role</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Alice Brown</td>
+                                    <td>Support</td>
+                                    <td>Employee</td>
+                                    <td><span class="status done">Active</span></td>
+                                </tr>
+                                <tr>
+                                    <td>John Smith</td>
+                                    <td>Operations</td>
+                                    <td>Manager</td>
+                                    <td><span class="status review">In Review</span></td>
+                                </tr>
+                                <tr>
+                                    <td>Maya Lee</td>
+                                    <td>HR</td>
+                                    <td>Employee</td>
+                                    <td><span class="status pending">Pending</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+</html>
