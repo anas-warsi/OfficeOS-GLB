@@ -58,6 +58,27 @@ function officeos_sign_out(): void
     }
 }
 
+function officeos_session_records(string $key): array
+{
+    return isset($_SESSION[$key]) && is_array($_SESSION[$key]) ? $_SESSION[$key] : [];
+}
+
+function officeos_session_store_record(string $key, array $record): void
+{
+    $records = officeos_session_records($key);
+    $records[] = $record;
+    $_SESSION[$key] = $records;
+}
+
+function officeos_role_label(string $role): string
+{
+    return match (strtolower($role)) {
+        'admin' => 'Administrator',
+        'manager' => 'Manager',
+        default => 'Employee',
+    };
+}
+
 function officeos_demo_users(): array
 {
     return [
@@ -256,6 +277,56 @@ function officeos_leaderboard(?mysqli $connection, int $currentUserId): array
     return $fallback;
 }
 
+function officeos_employee_attendance_summary(?mysqli $connection, int $userId): array
+{
+    if ($connection instanceof mysqli) {
+        $rows = officeos_fetch_all(
+            $connection,
+            'SELECT work_date, check_in, check_out, status FROM attendance WHERE user_id = ? ORDER BY work_date DESC, id DESC LIMIT 1',
+            'i',
+            [$userId]
+        );
+
+        if ($rows !== []) {
+            return $rows[0];
+        }
+    }
+
+    $records = array_values(array_filter(
+        officeos_session_records('attendance_entries'),
+        static fn (array $row): bool => (int) ($row['user_id'] ?? 0) === $userId
+    ));
+
+    if ($records === []) {
+        return [];
+    }
+
+    usort($records, static fn (array $left, array $right): int => strcmp((string) ($right['work_date'] ?? ''), (string) ($left['work_date'] ?? '')));
+
+    return $records[0];
+}
+
+function officeos_employee_leave_requests(?mysqli $connection, int $userId): array
+{
+    if ($connection instanceof mysqli) {
+        return officeos_fetch_all(
+            $connection,
+            'SELECT id, leave_type, start_date, end_date, status, reason FROM leave_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT 5',
+            'i',
+            [$userId]
+        );
+    }
+
+    $records = array_values(array_filter(
+        officeos_session_records('leave_requests'),
+        static fn (array $row): bool => (int) ($row['user_id'] ?? 0) === $userId
+    ));
+
+    usort($records, static fn (array $left, array $right): int => strcmp((string) ($right['created_at'] ?? ''), (string) ($left['created_at'] ?? '')));
+
+    return array_slice($records, 0, 5);
+}
+
 function officeos_role_model(string $role, ?mysqli $connection, array $user): array
 {
     $userId = (int) ($user['id'] ?? 0);
@@ -391,6 +462,8 @@ function officeos_render_table(array $headers, array $rows, string $role): void
 function officeos_render_dashboard(array $model, array $currentUser, ?mysqli $connection): void
 {
     $role = (string) ($model['role'] ?? 'employee');
+    $userName = (string) ($currentUser['full_name'] ?? 'User');
+    $userRole = officeos_role_label((string) ($currentUser['role'] ?? 'employee'));
     $employees = $connection instanceof mysqli ? officeos_fetch_all($connection, "SELECT id, full_name FROM users WHERE role = 'employee' AND status = 'active' ORDER BY full_name ASC") : officeos_demo_employees();
     $leaveRows = $connection instanceof mysqli ? officeos_fetch_all($connection, 'SELECT lr.id, u.full_name, lr.leave_type, lr.start_date, lr.end_date, lr.status FROM leave_requests lr INNER JOIN users u ON u.id = lr.user_id ORDER BY lr.created_at DESC LIMIT 5') : [];
     ?>
@@ -411,15 +484,34 @@ function officeos_render_dashboard(array $model, array $currentUser, ?mysqli $co
     </div>
     <main class="container layout">
         <aside class="sidebar">
-            <h2><?php echo officeos_esc((string) ($currentUser['full_name'] ?? 'User')); ?></h2>
-            <p><?php echo officeos_esc(ucfirst($role)); ?> dashboard</p>
-            <ul class="menu">
-                <li><a href="#overview">Overview</a></li>
-                <li><a href="#tasks">Tasks</a></li>
-                <li><a href="#attendance">Attendance</a></li>
-                <li><a href="#leave">Leave</a></li>
-                <li><a href="#leaderboard">Leaderboard</a></li>
-            </ul>
+            <div class="sidebar-profile">
+                <div class="sidebar-avatar"><?php echo officeos_esc(strtoupper(substr($userName, 0, 1) ?: 'U')); ?></div>
+                <div>
+                    <h2><?php echo officeos_esc($userName); ?></h2>
+                    <p><?php echo officeos_esc($userRole); ?> dashboard</p>
+                </div>
+            </div>
+
+            <div class="sidebar-card">
+                <span class="sidebar-label">Quick status</span>
+                <strong><?php echo officeos_esc((string) $model['badge']); ?></strong>
+                <p>Simple access to tasks, attendance, leave, and leaderboard.</p>
+            </div>
+
+            <nav class="sidebar-nav" aria-label="Dashboard sections">
+                <a href="#overview">Overview</a>
+                <a href="#tasks">Tasks</a>
+                <a href="#attendance">Attendance</a>
+                <a href="#leave">Leave</a>
+                <a href="#leaderboard">Leaderboard</a>
+            </nav>
+
+            <div class="sidebar-card sidebar-footer">
+                <span class="sidebar-label">Today</span>
+                <strong><?php echo officeos_esc(date('M j, Y')); ?></strong>
+                <p><?php echo officeos_esc(ucfirst($role)); ?> workspace ready.</p>
+                <a class="btn ghost sidebar-button" href="?logout=1">Logout</a>
+            </div>
         </aside>
         <section class="content">
             <div class="hero" id="overview">
@@ -701,12 +793,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'attendance_check_in' && $role === 'employee') {
         $today = date('Y-m-d');
         $time = date('H:i:s');
-        $saved = officeos_execute(
-            $connection,
-            'INSERT INTO attendance (user_id, work_date, check_in, status) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE check_in = VALUES(check_in), status = VALUES(status)',
-            'isss',
-            [$currentUserId, $today, $time, 'present']
-        );
+        if ($connection instanceof mysqli) {
+            $saved = officeos_execute(
+                $connection,
+                'INSERT INTO attendance (user_id, work_date, check_in, status) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE check_in = VALUES(check_in), status = VALUES(status)',
+                'isss',
+                [$currentUserId, $today, $time, 'present']
+            );
+        } else {
+            officeos_session_store_record('attendance_entries', [
+                'user_id' => $currentUserId,
+                'work_date' => $today,
+                'check_in' => $time,
+                'check_out' => null,
+                'status' => 'present',
+                'created_at' => date('c'),
+            ]);
+            $saved = true;
+        }
 
         officeos_flash($saved ? 'Attendance check-in saved.' : 'Check-in could not be saved.');
         officeos_redirect_self();
@@ -715,12 +819,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'attendance_check_out' && $role === 'employee') {
         $today = date('Y-m-d');
         $time = date('H:i:s');
-        $saved = officeos_execute(
-            $connection,
-            'UPDATE attendance SET check_out = ? WHERE user_id = ? AND work_date = ?',
-            'sis',
-            [$time, $currentUserId, $today]
-        );
+        if ($connection instanceof mysqli) {
+            $saved = officeos_execute(
+                $connection,
+                'INSERT INTO attendance (user_id, work_date, check_out, status) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE check_out = VALUES(check_out), status = VALUES(status)',
+                'isss',
+                [$currentUserId, $today, $time, 'present']
+            );
+        } else {
+            $records = officeos_session_records('attendance_entries');
+            $updated = false;
+
+            foreach ($records as &$record) {
+                if ((int) ($record['user_id'] ?? 0) === $currentUserId && (string) ($record['work_date'] ?? '') === $today) {
+                    $record['check_out'] = $time;
+                    $record['status'] = 'present';
+                    $updated = true;
+                }
+            }
+
+            if (!$updated) {
+                $records[] = [
+                    'user_id' => $currentUserId,
+                    'work_date' => $today,
+                    'check_in' => null,
+                    'check_out' => $time,
+                    'status' => 'present',
+                    'created_at' => date('c'),
+                ];
+            }
+
+            $_SESSION['attendance_entries'] = $records;
+            $saved = true;
+        }
 
         officeos_flash($saved ? 'Attendance check-out saved.' : 'Check-out could not be saved.');
         officeos_redirect_self();
@@ -737,12 +868,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             officeos_redirect_self();
         }
 
-        $saved = officeos_execute(
-            $connection,
-            'INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, ?, ?)',
-            'isssss',
-            [$currentUserId, $leaveType, $startDate, $endDate, $reason, 'pending']
-        );
+        if ($connection instanceof mysqli) {
+            $saved = officeos_execute(
+                $connection,
+                'INSERT INTO leave_requests (user_id, leave_type, start_date, end_date, reason, status) VALUES (?, ?, ?, ?, ?, ?)',
+                'isssss',
+                [$currentUserId, $leaveType, $startDate, $endDate, $reason, 'pending']
+            );
+        } else {
+            officeos_session_store_record('leave_requests', [
+                'id' => count(officeos_session_records('leave_requests')) + 1,
+                'user_id' => $currentUserId,
+                'leave_type' => $leaveType,
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'reason' => $reason,
+                'status' => 'pending',
+                'created_at' => date('c'),
+            ]);
+            $saved = true;
+        }
 
         officeos_flash($saved ? 'Leave request submitted.' : 'Leave request could not be saved.');
         officeos_redirect_self();
@@ -876,7 +1021,6 @@ $model = $currentUser ? officeos_role_model((string) ($currentUser['role'] ?? 'e
                 </div>
                 <button class="btn primary" type="submit">Login</button>
             </form>
-            <p class="footer-note" style="margin-top:16px;">Demo credentials: admin / admin123, manager / manager123, employee / employee123.</p>
         </section>
     </div>
 <?php else: ?>

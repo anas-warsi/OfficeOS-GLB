@@ -119,6 +119,87 @@ button {
     height: fit-content;
 }
 
+.sidebar-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+}
+
+.sidebar-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 700;
+}
+
+.sidebar-profile h2 {
+    margin: 0;
+    font-size: 1.02rem;
+}
+
+.sidebar-profile p {
+    margin: 3px 0 0;
+}
+
+.sidebar-card {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    background: var(--panel-soft);
+    border: 1px solid var(--line);
+}
+
+.sidebar-label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.sidebar-card strong {
+    display: block;
+    margin-bottom: 6px;
+}
+
+.sidebar-card p {
+    margin: 0;
+}
+
+.sidebar-nav {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.sidebar-nav a {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #fff;
+    border: 1px solid var(--line);
+}
+
+.sidebar-nav a:hover {
+    background: #f7f8fa;
+}
+
+.sidebar-footer {
+    display: grid;
+    gap: 6px;
+}
+
+.sidebar-button {
+    margin-top: 6px;
+    width: 100%;
+}
+
 .sidebar h2,
 .section-card h3,
 .login-card h1,
