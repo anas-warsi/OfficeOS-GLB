@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Office OS | Login</title>
+    <style>
+        :root {
+            --bg: #eef2f6;
+            --panel: #ffffff;
+            --panel-soft: #f7f9fc;
+            --line: #d7dde5;
+            --text: #1f2937;
+            --muted: #667085;
+            --accent: #2f5f8f;
+            --accent-soft: #dce8f4;
+            --shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+            --radius: 18px;
+            --radius-sm: 12px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            min-height: 100%;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(47, 95, 143, 0.12), transparent 28%),
+                radial-gradient(circle at bottom right, rgba(47, 95, 143, 0.08), transparent 24%),
+                var(--bg);
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .page {
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+
+        .card {
+            width: min(980px, 100%);
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .hero {
+            padding: 44px;
+            background:
+                linear-gradient(135deg, rgba(47, 95, 143, 0.96), rgba(45, 73, 109, 0.98)),
+                var(--accent);
+            color: #fff;
+            position: relative;
+            isolation: isolate;
+        }
+
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: auto -40px -60px auto;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.12);
+            z-index: -1;
+        }
+
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 36px;
+        }
+
+        .brand-mark {
+            width: 44px;
+            height: 44px;
+            display: grid;
+            place-items: center;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.16);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+
+        .brand h1,
+        .brand p {
+            margin: 0;
+        }
+
+        .brand h1 {
+            font-size: 1.1rem;
+            line-height: 1.2;
+        }
+
+        .brand p {
+            margin-top: 3px;
+            color: rgba(255, 255, 255, 0.76);
+            font-size: 0.95rem;
+        }
+
+        .hero h2 {
+            margin: 0;
+            font-size: clamp(2rem, 4vw, 3.15rem);
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            max-width: 12ch;
+        }
+
+        .hero p.lead {
+            margin: 18px 0 0;
+            max-width: 42ch;
+            color: rgba(255, 255, 255, 0.84);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .hero-list {
+            list-style: none;
+            padding: 0;
+            margin: 28px 0 0;
+            display: grid;
+            gap: 12px;
+        }
+
+        .hero-list li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.96rem;
+        }
+
+        .hero-list span {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #fff;
+            flex: none;
+        }
+
+        .form-side {
+            padding: 40px;
+            background: linear-gradient(180deg, #ffffff, #fbfcfe);
+        }
+
+        .panel-title {
+            margin: 0;
+            font-size: 1.8rem;
+            line-height: 1.15;
+        }
+
+        .panel-subtitle {
+            margin: 10px 0 0;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        form {
+            display: grid;
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        label {
+            display: grid;
+            gap: 8px;
+            font-size: 0.95rem;
+            color: var(--text);
+        }
+
+        input {
+            width: 100%;
+            min-height: 48px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: var(--panel-soft);
+            color: var(--text);
+            outline: none;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+        }
+
+        input::placeholder {
+            color: #98a2b3;
+        }
+
+        input:focus {
+            background: #fff;
+            border-color: rgba(47, 95, 143, 0.55);
+            box-shadow: 0 0 0 4px rgba(47, 95, 143, 0.12);
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 0.92rem;
+            color: var(--muted);
+        }
+
+        .checkbox {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox input {
+            width: 16px;
+            height: 16px;
+            min-height: 16px;
+            margin: 0;
+            accent-color: var(--accent);
+        }
+
+        .forgot {
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        .button {
+            min-height: 48px;
+            border: 0;
+            border-radius: 12px;
+            background: var(--accent);
+            color: #fff;
+            font-size: 0.98rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 12px 24px rgba(47, 95, 143, 0.18);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+        }
+
+        .button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 14px 28px rgba(47, 95, 143, 0.22);
+        }
+
+        .button:active {
+            transform: translateY(0);
+            opacity: 0.96;
+        }
+
+        .note {
+            margin: 18px 0 0;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: #fcfdff;
+            color: var(--muted);
+            font-size: 0.92rem;
+            line-height: 1.55;
+        }
+
+        .note strong {
+            color: var(--text);
+        }
+
+        .footer {
+            margin-top: 18px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .footer a {
+            color: var(--accent);
+            font-weight: 700;
+        }
+
+        @media (max-width: 860px) {
+            .card {
+                grid-template-columns: 1fr;
+            }
+
+            .hero,
+            .form-side {
+                padding: 28px;
+            }
+
+            .hero h2 {
+                max-width: none;
+            }
+        }
+
+        @media (max-width: 540px) {
+            .page {
+                padding: 14px;
+            }
+
+            .hero,
+            .form-side {
+                padding: 22px;
+            }
+
+            .panel-title {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <section class="card" aria-label="Login page">
+            <div class="hero">
+                <div class="brand">
+                    <div class="brand-mark">O</div>
+                    <div>
+                        <h1>Office OS</h1>
+                        <p>Work dashboard access</p>
+                    </div>
+                </div>
+
+                <h2>Sign in to your workspace</h2>
+                <p class="lead">
+                    Use your account to open the employee, manager, or admin area and keep the day moving.
+                </p>
+
+                <ul class="hero-list">
+                    <li><span></span> Clean dashboard for daily work</li>
+                    <li><span></span> Simple access for all roles</li>
+                    <li><span></span> Fast login with a clear layout</li>
+                </ul>
+            </div>
+
+            <div class="form-side">
+                <h3 class="panel-title">Welcome back</h3>
+                <p class="panel-subtitle">Enter your username or email and password to continue.</p>
+
+                <form action="#" method="post">
+                    <label>
+                        Username or email
+                        <input type="text" name="identifier" placeholder="admin@officeos.local" autocomplete="username" required />
+                    </label>
+
+                    <label>
+                        Password
+                        <input type="password" name="password" placeholder="Enter your password" autocomplete="current-password" required />
+                    </label>
+
+                    <div class="row">
+                        <label class="checkbox">
+                            <input type="checkbox" name="remember" />
+                            Remember me
+                        </label>
+                        <a class="forgot" href="#">Forgot password?</a>
+                    </div>
+
+                    <button class="button" type="submit">Login</button>
+                </form>
+
+                <div class="note">
+                    <strong>Demo:</strong> admin / admin123, manager / manager123, employee / employee123
+                </div>
+
+                <p class="footer">
+                    Need the full dashboard? Open <a href="index.php">Office OS</a>.
+                </p>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

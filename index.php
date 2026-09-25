@@ -1003,7 +1003,7 @@ $model = $currentUser ? officeos_role_model((string) ($currentUser['role'] ?? 'e
                 </div>
             </div>
             <h1>Sign in</h1>
-            <p class="muted">Use the seeded accounts in the SQL file or connect the database and use your own users.</p>
+            
             <?php if ($flash): ?>
                 <div class="notice <?php echo officeos_esc((string) ($flash['type'] ?? 'success')); ?>"><?php echo officeos_esc((string) ($flash['message'] ?? '')); ?></div>
             <?php endif; ?>
