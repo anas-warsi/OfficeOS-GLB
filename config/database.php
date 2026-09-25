@@ -1,6 +1,15 @@
+<?php
+
 $host = "localhost";
 $user = "root";
 $password = "";
-$database = "office_os"
+$database = "officeos_db";
 
-$conn = new mysqli($host, $user, $password, $password)
+$conn = new mysqli($host, $user, $password, $database);
+
+if($conn->connect_error){
+    die("Error".$conn->connect_error);
+}
+
+
+?>
